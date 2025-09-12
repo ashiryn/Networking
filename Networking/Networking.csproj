@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>latestmajor</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>FluffyVoid.Networking</AssemblyName>
+        <RootNamespace>FluffyVoid.Networking</RootNamespace>
+        <PackageId>FluffyVoid.Networking</PackageId>
+        <Title>Networking</Title>
+        <Authors>FluffyVoid</Authors>
+        <Description>C# tools and utilities for handling Networking operations in an application.</Description>
+        <Company>FluffyVoid</Company>
+        <AssemblyVersion>1.0.0</AssemblyVersion>
+        <FileVersion>1.0.0</FileVersion>
+        <RepositoryUrl>https://github.com/ashiryn/Networking</RepositoryUrl>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+        <DocumentationFile>bin\Debug\Networking.xml</DocumentationFile>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+        <DocumentationFile>bin\Release\Networking.xml</DocumentationFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FluffyVoid.Logging" Version="1.0.0"/>
+        <PackageReference Include="FluffyVoid.Utilities" Version="1.0.2"/>
+    </ItemGroup>
+
+</Project>
