@@ -23,7 +23,7 @@ public class NetworkMessageDispatcher<TNetworkMessage, TNetworkEventArgs>
     /// <summary>
     ///     Lock object to enforce thread safety
     /// </summary>
-    protected Lock ThreadLock { get; set; } = new Lock();
+    protected object ThreadLock { get; set; } = new object();
     /// <summary>
     ///     Clears the routing table of all entries
     /// </summary>
@@ -40,7 +40,7 @@ public class NetworkMessageDispatcher<TNetworkMessage, TNetworkEventArgs>
     /// </summary>
     public void Initialize()
     {
-        ThreadLock = new Lock();
+        ThreadLock = new object();
         MessageRoutingTable =
             new Dictionary<ushort, Action<TNetworkEventArgs>?>();
 

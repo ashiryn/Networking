@@ -133,7 +133,7 @@ public class NetworkUdpClient : IDisposable
         await SendAsync(connectMessage);
         if (_cancelTokenSource != null)
         {
-            await _cancelTokenSource.CancelAsync();
+            _cancelTokenSource.Cancel();
         }
 
         Dispose();
@@ -299,7 +299,7 @@ public class NetworkUdpClient : IDisposable
                 Disconnected?.Invoke(this,
                                      new
                                          ClientDisconnectedEventArgs(connectionInfo.Successful,
-                                             connectionInfo));
+                                                  connectionInfo));
 
                 LogManager
                     .LogInfo($"{connectionInfo.Name} disconnected from server Locally:{connectionInfo.Successful}",

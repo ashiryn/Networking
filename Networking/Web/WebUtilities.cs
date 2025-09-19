@@ -19,20 +19,9 @@ public static class WebUtilities
                 Version = request.Version
             };
 
-        foreach (KeyValuePair<string, object?> property in request.Options)
+        foreach (KeyValuePair<string, object?> property in request.Properties)
         {
-            switch (property.Value)
-            {
-                case string s:
-                    result.Options
-                          .Set(new HttpRequestOptionsKey<string>(property.Key),
-                               s);
-
-                    break;
-                default:
-                    throw new
-                        InvalidOperationException("Can't deal with non-string message options ... yet.");
-            }
+            result.Properties.Add(property);
         }
 
         foreach (KeyValuePair<string, IEnumerable<string>> header in request
