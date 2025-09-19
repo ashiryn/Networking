@@ -11,21 +11,26 @@ namespace FluffyVoid.Networking.Web;
 public class WebServer
 {
     /// <summary>
+    ///     Cancellation token to use when shutting down the client
+    /// </summary>
+    private readonly CancellationTokenSource? _cancelTokenSource;
+    /// <summary>
     ///     The http listener for the web server
     /// </summary>
     private readonly HttpListener _httpListener;
     /// <summary>
-    ///     The listener thread for the server
-    /// </summary>
-    private readonly Thread? _listenerThread;
-    /// <summary>
     ///     Lock object used to ensure that the queue stays thread safe
     /// </summary>
-    private readonly Lock _requestLock;
+    private readonly object _requestLock;
     /// <summary>
     ///     the queue of request message received
     /// </summary>
     private readonly Queue<WebServerMessage> _requestMessages;
+
+    /// <summary>
+    ///     Whether the server is currently listening for network traffic or not
+    /// </summary>
+    public bool IsListening { get; private set; }
     /// <summary>
     ///     Event used to notify listeners that a DELETE request has just been received
     /// </summary>
@@ -61,39 +66,101 @@ public class WebServer
     /// </summary>
     public event EventHandler<WebSocketConnectMessage>?
         WebSocketClientConnected;
+
     /// <summary>
-    ///     Constructor used to setup the listening prefixes for the HTTP server
+    ///     Constructor used to set up the listening prefixes for the HTTP server
     /// </summary>
     /// <param name="prefixes">The list of http prefixes to bind to</param>
     public WebServer(string[] prefixes)
     {
         _requestMessages = new Queue<WebServerMessage>();
-        _requestLock = new Lock();
+        _requestLock = new object();
         _httpListener = new HttpListener();
+        _cancelTokenSource = new CancellationTokenSource();
         foreach (string prefix in prefixes)
         {
             _httpListener.Prefixes.Add(prefix);
+        }
+    }
+    /// <summary>
+    ///     Closes the server and releases all resources
+    /// </summary>
+    public virtual void Dispose()
+    {
+        _cancelTokenSource?.Dispose();
+        _httpListener.Stop();
+    }
+    /// <summary>
+    ///     Listen loop used to allow the server to listen for network traffic without blocking the main thread
+    /// </summary>
+    public async Task ListenAsync()
+    {
+        if (_cancelTokenSource == null)
+        {
+            return;
         }
 
         try
         {
             _httpListener.Start();
-            _listenerThread = new Thread(StartListening);
-            _listenerThread.Start();
         }
         catch (HttpListenerException ex)
         {
             LogManager.LogException("Failed to start server", nameof(WebServer),
                                     ex: ex);
         }
+        catch (Exception ex)
+        {
+            LogManager
+                .LogException("Server threw an exception while starting the http listener",
+                              nameof(WebServer), ex: ex);
+        }
+
+        IsListening = true;
+        do
+        {
+            try
+            {
+                HttpListenerContext context =
+                    await
+                        Task.Run(() => _httpListener.GetContextAsync().WithCancellation(_cancelTokenSource.Token),
+                                 _cancelTokenSource.Token);
+
+                if (_cancelTokenSource.Token.IsCancellationRequested)
+                {
+                    IsListening = false;
+                    return;
+                }
+
+                await ProcessMessage(context);
+            }
+            catch (ObjectDisposedException)
+            {
+                IsListening = false;
+                LogManager.Log("Server shutting down->Server Disposed",
+                               nameof(WebServer));
+            }
+            catch (TaskCanceledException)
+            {
+                IsListening = false;
+                LogManager.Log("Server shutting down->Task Cancelled",
+                               nameof(WebServer));
+            }
+            catch (Exception ex)
+            {
+                LogManager
+                    .LogException("Server threw an exception while listening",
+                                  nameof(WebServer), ex: ex);
+            }
+        } while (IsListening);
     }
     /// <summary>
     ///     Shuts down the server
     /// </summary>
     public void Shutdown()
     {
-        _httpListener.Stop();
-        _listenerThread?.Join(2000);
+        _cancelTokenSource?.Cancel();
+        Dispose();
     }
     /// <summary>
     ///     Update method that dispatches any received messages via events
@@ -122,7 +189,7 @@ public class WebServer
         {
             WebMethod method =
                 EnumUtility.GetValueFromDescription<WebMethod>(requestToHandle
-                    .HttpMethod);
+                             .HttpMethod);
 
             switch (method)
             {
@@ -156,32 +223,26 @@ public class WebServer
         }
     }
     /// <summary>
-    ///     Async result callback that parses and builds the WebServerMessage to use be queued
+    ///     Helper function used to process the incoming web message
     /// </summary>
-    /// <param name="result">The async result object passed in with the callback</param>
-    private void MessageReceived(IAsyncResult result)
+    /// <param name="context">Reference to the current http context to retrieve a web request from</param>
+    private async Task ProcessMessage(HttpListenerContext context)
     {
-        if (result.AsyncState is not HttpListener listener)
-        {
-            return;
-        }
-
         try
         {
-            HttpListenerContext context = listener.EndGetContext(result);
             HttpListenerRequest request = context.Request;
             HttpListenerResponse response = context.Response;
             if (request.IsWebSocketRequest)
             {
-                Task<HttpListenerWebSocketContext> ctx =
-                    context.AcceptWebSocketAsync(null);
+                HttpListenerWebSocketContext ctx =
+                    await context.AcceptWebSocketAsync(null);
 
-                WebSocket webSocket = ctx.Result.WebSocket;
+                WebSocket webSocket = ctx.WebSocket;
                 WebSocketClientConnected?.Invoke(this,
                                                  new
                                                      WebSocketConnectMessage(webSocket,
-                                                         request,
-                                                         response));
+                                                              request,
+                                                              response));
 
                 return;
             }
@@ -189,7 +250,7 @@ public class WebServer
             lock (_requestLock)
             {
                 _requestMessages.Enqueue(new WebServerMessage(context, request,
-                                             response));
+                                                  response));
             }
         }
         catch (ObjectDisposedException)
@@ -205,35 +266,6 @@ public class WebServer
         {
             LogManager.LogException("Unhandled exception has been caught",
                                     nameof(WebServer), ex: ex);
-        }
-    }
-
-    /// <summary>
-    ///     Starts the listener thread for the server to start listening for HTTP messages
-    /// </summary>
-    private void StartListening()
-    {
-        try
-        {
-            while (_httpListener.IsListening)
-            {
-                IAsyncResult result =
-                    _httpListener.BeginGetContext(MessageReceived,
-                                                  _httpListener);
-
-                result.AsyncWaitHandle.WaitOne();
-            }
-        }
-        catch (ObjectDisposedException)
-        {
-            LogManager.Log("Server shutting down->Server Disposed",
-                           nameof(WebServer));
-        }
-        catch (Exception ex)
-        {
-            LogManager
-                .LogException("Server threw an exception while listening",
-                              nameof(WebServer), ex: ex);
         }
     }
 }

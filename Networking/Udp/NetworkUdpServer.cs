@@ -120,9 +120,9 @@ public class NetworkUdpServer : IDisposable
             return;
         }
 
+        IsListening = true;
         do
         {
-            IsListening = true;
             try
             {
                 UdpReceiveResult udpResult =
