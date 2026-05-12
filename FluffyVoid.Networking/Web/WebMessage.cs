@@ -2,7 +2,7 @@
 using System.Text;
 using FluffyVoid.Logging;
 using FluffyVoid.Utilities;
-using FluffyVoid.Utilities.Cloneable;
+using FluffyVoid.Utilities.Cloning;
 
 namespace FluffyVoid.Networking.Web
 {
